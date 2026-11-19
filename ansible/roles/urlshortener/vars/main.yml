@@ -1,5 +1,0 @@
----
-# vars file for urlshortener
-app_files:
-  - main.py
-  - requirements.txt

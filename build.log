@@ -1,0 +1,4 @@
+﻿
+> linkforge@1.0.0 build
+> if not exist dist mkdir dist && copy /Y index.html dist\
+

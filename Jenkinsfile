@@ -10,7 +10,6 @@ pipeline {
     environment {
         IMAGE_NAME = 'smart-url-shortener'
         VENV       = '.venv'
-        PATH       = "/opt/homebrew/bin:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin:${env.PATH}"
     }
 
     stages {
@@ -20,44 +19,54 @@ pipeline {
             }
         }
 
-        stage('Setup') {
+        stage('Environment Check') {
             steps {
-                sh '''
-                    python3 -m venv ${VENV}
-                    ${VENV}/bin/pip install --upgrade pip
-                    make PYTHON=${VENV}/bin/python install
-                '''
+                bat 'node -v'
+                bat 'npm -v'
+                bat 'git --version'
+                bat 'python --version'
             }
         }
 
-        // Component 1 Enhancement, Option A: automated tests before packaging
-        stage('Test') {
+        stage('Install Dependencies') {
             steps {
-                sh 'make PYTHON=${VENV}/bin/python test'
+                bat 'npm install'
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                bat 'npm run lint'
             }
         }
 
         stage('Build') {
             steps {
-                sh 'make PYTHON=${VENV}/bin/python build'
+                bat 'npm run build'
             }
         }
 
-        stage('Archive Artifact') {
+        stage('Archive Artifacts') {
             steps {
-                archiveArtifacts artifacts: 'dist/*.whl', fingerprint: true
+                archiveArtifacts artifacts: 'dist/*', fingerprint: true
             }
         }
 
-        // Component 1 Enhancement, Option B: image tag = build number + git SHA
-        stage('Docker Build') {
+        stage('Deploy to GitHub Pages') {
             steps {
-                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    script {
-                        def sha = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
-                        env.IMAGE_TAG = "${env.BUILD_NUMBER}-${sha}"
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'github-pat', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
+                        bat '''
+                            if exist dist\\* (
+                                git checkout --orphan gh-pages
+                                git rm -rf . >nul 2>&1
+                                xcopy /Y /Q dist\\* .
+                                git add .
+                                git commit -m "Deploy build ${BUILD_NUMBER}"
+                                git push origin gh-pages --force
+                            )
+                        '''
                     }
-                    sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .'
                 }
             }
         }
